@@ -11,7 +11,9 @@ function kakaoSimpleText(message) {
     template: {
       outputs: [
         {
-          simpleText: { text: message },
+          simpleText: {
+            text: message,
+          },
         },
       ],
     },
@@ -20,6 +22,7 @@ function kakaoSimpleText(message) {
 
 function parseCommand(text) {
   text = (text || "").trim();
+
   let m = text.match(/^(출근|ㅎㅇ)(\d+)$/);
   if (m) return { command: "check_in", employee_no: m[2] };
 
@@ -35,36 +38,46 @@ function parseCommand(text) {
     };
 
   m = text.match(/^(\d+)번\s*누적근무일수\s*(\d+)일\s*추가$/);
-  if (m) return { command: "add_days", employee_no: m[1], amount: Number(m[2]) };
+  if (m)
+    return {
+      command: "add_days",
+      employee_no: m[1],
+      amount: Number(m[2]),
+    };
 
   m = text.match(/^(\d+)번\s*누적근무일수\s*(\d+)일\s*제거$/);
   if (m)
-    return { command: "remove_days", employee_no: m[1], amount: Number(m[2]) };
+    return {
+      command: "remove_days",
+      employee_no: m[1],
+      amount: Number(m[2]),
+    };
 
   return null;
 }
 
-module.exports = async (req, res) => {
-  if (req.method !== "POST") {
-    return res.status(405).json({ message: "Method Not Allowed" });
-  }
-
+export default async function handler(req, res) {
   try {
-    const utterance = req.body?.userRequest?.utterance?.trim() || "";
+    if (req.method !== "POST") {
+      return res.status(405).json({ error: "Only POST allowed" });
+    }
+
+    const utterance = req.body?.userRequest?.utterance || "";
     const commandData = parseCommand(utterance);
 
     if (!commandData) {
       return res.json(kakaoSimpleText("지원하지 않는 형식입니다."));
     }
 
-    const makeResponse = await axios.post(MAKE_WEBHOOK_URL, commandData, {
-      headers: { "Content-Type": "application/json" },
-    });
+    const makeResponse = await axios.post(MAKE_WEBHOOK_URL, commandData);
+    const message = makeResponse.data?.message;
 
-    const message = makeResponse.data?.message || "응답 오류";
+    if (!message) {
+      return res.json(kakaoSimpleText("message 필드 없음"));
+    }
 
     return res.json(kakaoSimpleText(message));
-  } catch (err) {
-    return res.json(kakaoSimpleText("서버 오류 발생"));
+  } catch (e) {
+    return res.json(kakaoSimpleText("서버 내부 오류"));
   }
-};
+}
